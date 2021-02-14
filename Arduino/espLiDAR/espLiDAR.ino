@@ -58,7 +58,8 @@ void poll() {
                         uint8_t byte3 = raw_bytes[j + 3];
 
                         int range = (byte3 << 8) + byte2;
-                        fullRanges[359 - index] = range / 1000.0;
+                        fullRanges[index] = range / 1000.0;
+                        
                         yield();
                     }
                     if (i == 2478)
@@ -115,10 +116,9 @@ void loop() {
                 }
                 scan.ranges = ranges;
                 laser_pub.publish(&scan);
-                delay(20);
+                delay(5);
             }
         }
         nh.spinOnce();
-        delay(20);
     }
 }
