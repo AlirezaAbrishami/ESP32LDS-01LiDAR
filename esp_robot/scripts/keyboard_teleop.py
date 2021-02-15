@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-
 import rospy
 from geometry_msgs.msg import Twist
 from pynput import keyboard
+import sys
 
 pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
 move_cmd = Twist()
@@ -14,6 +14,7 @@ right_forward = False
 left_forward = False
 right_backward = False
 left_backward = False
+ctrl = False
 
 def talker():
     rospy.init_node('talker', anonymous=True)
@@ -21,7 +22,7 @@ def talker():
     move_cmd.linear.x = 1.0
 
 def on_press(key):
-    print(str(key))
+    print(key,)
     global pub
     global move_cmd
     global speed
@@ -32,6 +33,7 @@ def on_press(key):
     global left_forward
     global right_backward
     global left_backward
+    global ctrl
 
     if str(key) == "u\'w\'" and not forward:
         move_cmd.linear.y = speed
@@ -69,6 +71,18 @@ def on_press(key):
         left_backward = True
         rospy.sleep(0.1)
         pub.publish(move_cmd)
+    elif str(key) == "u\'i\'":
+        if speed - 0.2 >= 0.0:
+            speed = speed - 0.2
+            print("Speed: " + str(speed))
+    elif str(key) == "u\'o\'":
+        if speed + 0.2 <= 1.0:
+            speed = speed + 0.2
+            print("Speed: " + str(speed))
+    elif str(key) == "u\'c\'" and ctrl:
+        sys.exit()
+    elif str(key) == "Key.ctrl":
+        ctrl = True
 
 def on_release(key):
     global forward
@@ -77,12 +91,15 @@ def on_release(key):
     global left_forward
     global right_backward
     global left_backward
+    global ctrl
     
     global move_cmd
     global pub
 
     forward = False; backward = False; right_forward = False; left_forward = False; right_backward = False; left_backward = False
 
+    if str(key) == "Key.ctrl":
+        ctrl = False
     move_cmd.linear.x = 0.0
     move_cmd.linear.y = 0.0
     rospy.sleep(0.1)
