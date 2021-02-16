@@ -2,6 +2,8 @@
 #include <ros.h>
 #include <std_msgs/UInt16.h>
 #include <sensor_msgs/LaserScan.h>
+#include <geometry_msgs/Twist.h>
+#include <pthread.h>
 
 ros::NodeHandle nh;
 sensor_msgs::LaserScan scan;
@@ -22,6 +24,7 @@ float* ranges = new float[92];
 float fullRanges[360];
 bool gotScan = false;
 long blinkMillis;
+bool spinning = false;
 
 void poll() {
     Serial.println("poll");
@@ -59,7 +62,7 @@ void poll() {
 
                         int range = (byte3 << 8) + byte2;
                         fullRanges[index] = range / 1000.0;
-                        
+
                         yield();
                     }
                     if (i == 2478)
@@ -70,9 +73,57 @@ void poll() {
     }
 }
 
+void motorCallBack(const geometry_msgs::Twist& cmd) {
+    Serial.println(cmd.linear.x);
+    Serial.println(cmd.linear.y);
+    if (cmd.linear.y == 0) {
+        ledcWrite(4, 0);
+        ledcWrite(3, 0);
+        ledcWrite(10, 0);
+        ledcWrite(5, 0);
+    } else if (cmd.linear.y > 0) {
+        ledcWrite(10, 0);
+        ledcWrite(5, 0);
+        ledcWrite(4, (cmd.linear.x < 0 ? -(cmd.linear.x) * 225 : cmd.linear.y * 225));
+        ledcWrite(3, (cmd.linear.x > 0 ? cmd.linear.x * 225 : cmd.linear.y * 225));
+    } else if (cmd.linear.y < 0) {
+        ledcWrite(4, 0);
+        ledcWrite(3, 0);
+        ledcWrite(10, (cmd.linear.x < 0 ? -(cmd.linear.x) * 225 : -(cmd.linear.y) * 225));
+        ledcWrite(5, (cmd.linear.x > 0 ? cmd.linear.x * 225 : -(cmd.linear.y) * 225));
+    }
+}
+
+void *spinThread(void *a) {
+    ros::Subscriber<geometry_msgs::Twist> sub("cmd_vel", motorCallBack);
+    nh.subscribe(sub);
+    while (true) {
+        delay(5);
+        if (!spinning)
+            nh.spinOnce();
+        yield();
+    }
+}
+
 void setup() {
     Serial.begin(230400);
     pinMode(14, OUTPUT);
+    pinMode(13, OUTPUT);
+    pinMode(2, OUTPUT);
+    pinMode(15, OUTPUT);
+    pinMode(12, OUTPUT);
+
+    ledcSetup(3, 2000, 8); // 2000 hz PWM, 8-bit resolution
+    ledcSetup(4, 2000, 8);
+    ledcSetup(5, 2000, 8);
+    ledcSetup(10, 2000, 8);
+    delay(25);
+    ledcAttachPin(13, 3);
+    ledcAttachPin(12, 4);
+    ledcAttachPin(2, 5);
+    ledcAttachPin(15, 10);
+    digitalWrite(14, 1);
+    delay(500);
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
@@ -89,7 +140,15 @@ void setup() {
     nh.initNode();
 
     nh.advertise(laser_pub);
+    delay(20);
+    pthread_t thread;
+    int returnValue = pthread_create(&thread, NULL, spinThread, (void*)1);
 
+    if (returnValue) {
+        Serial.println("An error has occurred");
+    }
+
+    delay(500);
 }
 
 void loop() {
@@ -116,9 +175,12 @@ void loop() {
                 }
                 scan.ranges = ranges;
                 laser_pub.publish(&scan);
+                spinning = true;
+                nh.spinOnce();
+                spinning = false;
                 delay(5);
             }
         }
-        nh.spinOnce();
     }
+    delay(2);
 }
